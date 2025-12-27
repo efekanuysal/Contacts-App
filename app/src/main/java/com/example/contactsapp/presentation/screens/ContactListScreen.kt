@@ -2,7 +2,6 @@ package com.example.contactsapp.presentation.screens
 
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.rememberSplineBasedDecay
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,39 +9,23 @@ import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,42 +33,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.contactsapp.R
 import com.example.contactsapp.domain.model.Contact
 import com.example.contactsapp.presentation.components.SearchBar
 import com.example.contactsapp.presentation.components.SuccessMessageOverlay
 import com.example.contactsapp.presentation.contract.ContactEvent
 import com.example.contactsapp.presentation.contract.ContactState
-import kotlin.math.roundToInt
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.anchoredDraggable
-import androidx.compose.foundation.gestures.animateTo
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.animation.rememberSplineBasedDecay
-import coil.compose.AsyncImage
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -99,10 +59,18 @@ fun ContactListScreen(
 ) {
     var contactToDelete by remember { mutableStateOf<Contact?>(null) }
 
+    // Added FocusManager to handle keyboard dismissal
+    val focusManager = LocalFocusManager.current
+
+    // Advanced search logic: Supports "First Name space Last Name"
     val filteredContacts = remember(state.contacts, state.searchQuery) {
-        state.contacts.filter {
-            it.firstName.contains(state.searchQuery, ignoreCase = true) ||
-                    it.lastName.contains(state.searchQuery, ignoreCase = true)
+        if (state.searchQuery.isBlank()) {
+            state.contacts
+        } else {
+            state.contacts.filter { contact ->
+                val fullName = "${contact.firstName} ${contact.lastName}"
+                fullName.contains(state.searchQuery.trim(), ignoreCase = true)
+            }
         }
     }
 
@@ -125,42 +93,89 @@ fun ContactListScreen(
 
     Scaffold(
         containerColor = Color(0xFFF2F2F7),
-        topBar = { ContactsHeader(onAddClick = onNavigateToAdd) }
+        topBar = {
+            ContactsHeader(
+                onAddClick = onNavigateToAdd,
+                onTitleClick = {
+                    // Reset logic: Clear query, clear focus (closes history), dismiss keyboard
+                    onEvent(ContactEvent.OnSearchQueryChanged(""))
+                    onEvent(ContactEvent.OnSearchFocusChanged(false))
+                    focusManager.clearFocus()
+                }
+            )
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
+                // Optional: Clear focus when clicking background to close keyboard/history
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    focusManager.clearFocus()
+                }
         ) {
             SearchBar(
                 query = state.searchQuery,
-                onQueryChanged = { onEvent(ContactEvent.OnSearchQueryChanged(it)) }
+                onQueryChanged = { onEvent(ContactEvent.OnSearchQueryChanged(it)) },
+                onFocusChanged = { onEvent(ContactEvent.OnSearchFocusChanged(it)) }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (state.contacts.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
-                ) {
-                    groupedContacts.forEach { (initial, contacts) ->
-                        item {
-                            ContactGroup(
-                                initial = initial,
-                                contacts = contacts,
-                                onContactClick = onContactClick,
-                                onEditClick = { contact ->
-                                    onEvent(ContactEvent.OnContactSelected(contact))
-                                    onEvent(ContactEvent.OnToggleEditMode)
-                                    onNavigateToDetail()
-                                },
-                                onDeleteClick = { contact ->
-                                    contactToDelete = contact
+            // State Logic (Preserved Exactly as requested):
+            // 1. Search Active & Empty Query -> Show History
+            // 2. Search Active & Query Exists & No Results -> Show Error
+            // 3. Search Active & Query Exists & Results -> Show Results
+            // 4. Default -> Show All Contacts
+
+            when {
+                state.isSearchActive && state.searchQuery.isEmpty() && state.previousSearches.isNotEmpty() -> {
+                    PreviousSearchesList(
+                        searches = state.previousSearches,
+                        onSearchClick = { onEvent(ContactEvent.OnSearchQueryChanged(it)) },
+                        onRemoveClick = { onEvent(ContactEvent.OnRemoveSearchHistoryItem(it)) },
+                        onClearAllClick = { onEvent(ContactEvent.OnClearSearchHistory) }
+                    )
+                }
+
+                state.searchQuery.isNotEmpty() && filteredContacts.isEmpty() -> {
+                    NoMatchesFoundView()
+                }
+
+                else -> {
+                    if (filteredContacts.isNotEmpty()) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 80.dp)
+                        ) {
+                            groupedContacts.forEach { (initial, contacts) ->
+                                item {
+                                    ContactGroup(
+                                        initial = initial,
+                                        contacts = contacts,
+                                        onContactClick = { contact ->
+                                            onContactClick(contact)
+                                        },
+                                        onEditClick = { contact ->
+                                            onEvent(ContactEvent.OnContactSelected(contact))
+                                            onEvent(ContactEvent.OnToggleEditMode)
+                                            onNavigateToDetail()
+                                        },
+                                        onDeleteClick = { contact ->
+                                            contactToDelete = contact
+                                        }
+                                    )
                                 }
-                            )
+                            }
+                        }
+                    } else if (state.contacts.isEmpty() && !state.isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No contacts yet.", color = Color.Gray)
                         }
                     }
                 }
@@ -176,9 +191,110 @@ fun ContactListScreen(
     }
 }
 
+@Composable
+fun PreviousSearchesList(
+    searches: List<String>,
+    onSearchClick: (String) -> Unit,
+    onRemoveClick: (String) -> Unit,
+    onClearAllClick: () -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Previous searches",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = Color.Black
+            )
+            Text(
+                text = "Clear All",
+                fontSize = 14.sp,
+                color = Color.Gray,
+                modifier = Modifier.clickable { onClearAllClick() }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(searches.reversed()) { search -> // Show most recent first
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(8.dp))
+                        .clickable { onSearchClick(search) }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(text = search, fontSize = 16.sp, color = Color.Black)
+                    }
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Remove",
+                        tint = Color.LightGray,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable { onRemoveClick(search) }
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
-fun ContactsHeader(onAddClick: () -> Unit) {
+fun NoMatchesFoundView() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Used Spacer logic to push content slightly higher as requested in previous turn
+        Spacer(modifier = Modifier.weight(0.3f))
+
+        Icon(
+            imageVector = Icons.Default.SearchOff,
+            contentDescription = null,
+            tint = Color.LightGray,
+            modifier = Modifier.size(80.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No results found",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Try checking for typos or using a different name.",
+            fontSize = 16.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
+
+        Spacer(modifier = Modifier.weight(0.7f))
+    }
+}
+
+@Composable
+fun ContactsHeader(
+    onAddClick: () -> Unit,
+    onTitleClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -190,7 +306,11 @@ fun ContactsHeader(onAddClick: () -> Unit) {
             text = "Contacts",
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.Black
+            color = Color.Black,
+            modifier = Modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null 
+            ) { onTitleClick() }
         )
         Box(
             modifier = Modifier

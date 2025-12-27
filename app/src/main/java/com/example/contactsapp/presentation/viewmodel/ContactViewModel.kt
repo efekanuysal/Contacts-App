@@ -2,6 +2,7 @@ package com.example.contactsapp.presentation.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,11 +25,25 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
         context = application.applicationContext
     )
 
+    private val prefs: SharedPreferences = application.getSharedPreferences("contacts_app_prefs", Context.MODE_PRIVATE)
+    private val HISTORY_KEY = "search_history"
+
     private val _state = MutableStateFlow(ContactState())
     val state: StateFlow<ContactState> = _state.asStateFlow()
 
     init {
+        loadSearchHistory()
         fetchContacts()
+    }
+
+    private fun loadSearchHistory() {
+        val historySet = prefs.getStringSet(HISTORY_KEY, emptySet()) ?: emptySet()
+        _state.update { it.copy(previousSearches = historySet.toList().sorted()) }
+    }
+
+    private fun saveSearchHistory(history: List<String>) {
+        prefs.edit().putStringSet(HISTORY_KEY, history.toSet()).apply()
+        _state.update { it.copy(previousSearches = history) }
     }
 
     private fun fetchContacts() {
@@ -44,6 +59,17 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
         when (event) {
             is ContactEvent.OnSearchQueryChanged -> {
                 _state.update { it.copy(searchQuery = event.query) }
+            }
+            is ContactEvent.OnSearchFocusChanged -> {
+                _state.update { it.copy(isSearchActive = event.isFocused) }
+            }
+            is ContactEvent.OnRemoveSearchHistoryItem -> {
+                val current = _state.value.previousSearches.toMutableList()
+                current.remove(event.query)
+                saveSearchHistory(current)
+            }
+            ContactEvent.OnClearSearchHistory -> {
+                saveSearchHistory(emptyList())
             }
             is ContactEvent.OnFirstNameChanged -> {
                 _state.update { it.copy(firstNameInput = event.value) }
@@ -75,6 +101,16 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                 _state.update { it.copy(isContactSaved = false) }
             }
             is ContactEvent.OnContactSelected -> {
+                // If selection happens during a search, save query to history
+                if (_state.value.isSearchActive && _state.value.searchQuery.isNotBlank()) {
+                    val currentHistory = _state.value.previousSearches.toMutableList()
+                    val query = _state.value.searchQuery.trim()
+                    if (!currentHistory.contains(query)) {
+                        currentHistory.add(query)
+                        saveSearchHistory(currentHistory)
+                    }
+                }
+
                 _state.update {
                     it.copy(
                         selectedContact = event.contact,
@@ -92,8 +128,6 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
             ContactEvent.OnCheckLocalContactStatus -> {
                 val phoneNumber = _state.value.selectedContact?.phoneNumber ?: return
                 viewModelScope.launch(Dispatchers.IO) {
-                    // Normalize number logic is handled by Android's PhoneLookup,
-                    // but we ensure permission is strictly checked in repo first.
                     val exists = repository.isContactStoredInPhone(phoneNumber)
                     _state.update { it.copy(isContactSaved = exists) }
                 }
@@ -124,35 +158,10 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun handleOtherEvents(event: ContactEvent) {
+        // Fallback for events not handled in the main block
         when (event) {
-            is ContactEvent.OnSearchQueryChanged -> {
-                _state.update { it.copy(searchQuery = event.query) }
-            }
-            is ContactEvent.OnFirstNameChanged -> {
-                _state.update { it.copy(firstNameInput = event.value) }
-            }
-            is ContactEvent.OnLastNameChanged -> {
-                _state.update { it.copy(lastNameInput = event.value) }
-            }
-            is ContactEvent.OnPhoneNumberChanged -> {
-                _state.update { it.copy(phoneNumberInput = event.value) }
-            }
-            ContactEvent.OnAddPhotoClicked -> {
-                _state.update { it.copy(isImagePickerBottomSheetOpen = true) }
-            }
             ContactEvent.OnDismissImagePickerBottomSheet -> {
                 _state.update { it.copy(isImagePickerBottomSheetOpen = false) }
-            }
-            is ContactEvent.OnImageUriSelected -> {
-                _state.update {
-                    it.copy(
-                        selectedImageUri = event.uri,
-                        isImagePickerBottomSheetOpen = false
-                    )
-                }
-            }
-            ContactEvent.OnResetSaveState -> {
-                _state.update { it.copy(isContactSaved = false) }
             }
             else -> {}
         }
@@ -187,7 +196,7 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                     fetchContacts()
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Unknown Error"
-                    Log.e("API_ERROR", "Request Failed: $error") // Look for this tag in Logcat
+                    Log.e("API_ERROR", "Request Failed: $error")
                     _state.update { it.copy(isLoading = false, errorMessage = error) }
                 }
             } catch (e: Exception) {
@@ -196,6 +205,7 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
+
     private fun updateContact() {
         val contact = _state.value.selectedContact ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -208,7 +218,7 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
             )
             if (result.isSuccess) {
                 _state.update { it.copy(isEditMode = false, successMessage = "User is Updated!") }
-                fetchContacts() // Refresh list
+                fetchContacts()
             }
         }
     }
@@ -218,20 +228,14 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             val result = repository.deleteContact(contact.id)
             if (result.isSuccess) {
-                _state.update { it.copy(shouldNavigateBack = true,globalSuccessMessage = "Contact deleted!") }
+                _state.update { it.copy(shouldNavigateBack = true, globalSuccessMessage = "Contact deleted!") }
                 fetchContacts()
             }
         }
     }
-    private fun checkIfContactSavedLocally(phoneNumber: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val exists = repository.isContactStoredInPhone(phoneNumber)
-            _state.update { it.copy(isContactSaved = exists) }
-        }
-    }
+
     private fun saveToLocalPhone(context: Context) {
         val contact = _state.value.selectedContact ?: return
-        // Basic ContentProvider logic to save contact
         try {
             val ops = ArrayList<android.content.ContentProviderOperation>()
 
@@ -255,7 +259,7 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                 .build())
 
             context.contentResolver.applyBatch(android.provider.ContactsContract.AUTHORITY, ops)
-            _state.update { it.copy(globalSuccessMessage = "User is added to your phone!",isContactSaved = true) }
+            _state.update { it.copy(globalSuccessMessage = "User is added to your phone!", isContactSaved = true) }
             fetchContacts()
         } catch (e: Exception) {
             e.printStackTrace()

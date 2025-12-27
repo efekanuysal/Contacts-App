@@ -62,12 +62,14 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.focus.onFocusChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchBar(
     query: String,
     onQueryChanged: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     TextField(
@@ -75,7 +77,8 @@ fun SearchBar(
         onValueChange = onQueryChanged,
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp)),
+            .clip(RoundedCornerShape(12.dp))
+            .onFocusChanged { onFocusChanged(it.isFocused) },
         placeholder = { Text("Search by name") },
         leadingIcon = {
             Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color.Gray)

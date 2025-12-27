@@ -7,6 +7,8 @@ import com.example.contactsapp.domain.model.Contact
 data class ContactState(
     val contacts: List<Contact> = emptyList(),
     val searchQuery: String = "",
+    val previousSearches: List<String> = emptyList(),
+    val isSearchActive: Boolean = false,
     val firstNameInput: String = "",
     val lastNameInput: String = "",
     val phoneNumberInput: String = "",
@@ -19,14 +21,15 @@ data class ContactState(
     val successMessage: String? = null,
     val shouldNavigateBack: Boolean = false,
     val globalSuccessMessage: String? = null,
-    // Debugging
     val isLoading: Boolean = false,
     val errorMessage: String? = null
-
 )
 
 sealed interface ContactEvent {
     data class OnSearchQueryChanged(val query: String) : ContactEvent
+    data class OnSearchFocusChanged(val isFocused: Boolean) : ContactEvent
+    data class OnRemoveSearchHistoryItem(val query: String) : ContactEvent
+    data object OnClearSearchHistory : ContactEvent
     data class OnFirstNameChanged(val value: String) : ContactEvent
     data class OnLastNameChanged(val value: String) : ContactEvent
     data class OnPhoneNumberChanged(val value: String) : ContactEvent
