@@ -52,6 +52,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.runtime.*
+import androidx.palette.graphics.Palette
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -284,4 +294,47 @@ fun BottomSheetButton(
             Text(text = text, color = Color(0xFF007AFF), fontSize = 18.sp)
         }
     }
+}
+
+@Composable
+fun rememberDominantColor(
+    context: Context,
+    imageUri: Uri?,
+    defaultColor: Color = Color.LightGray
+): State<Color> {
+    val dominantColor = remember { mutableStateOf(defaultColor) }
+
+    LaunchedEffect(imageUri) {
+        if (imageUri == null) {
+            dominantColor.value = defaultColor
+            return@LaunchedEffect
+        }
+
+        withContext(Dispatchers.IO) {
+            val loader = ImageLoader(context)
+            val request = ImageRequest.Builder(context)
+                .data(imageUri)
+                .allowHardware(false)
+                .size(100)
+                .build()
+
+            val result = loader.execute(request)
+
+            if (result is SuccessResult) {
+                val bitmap = (result.drawable as BitmapDrawable).bitmap
+                val palette = Palette.from(bitmap).generate()
+
+                val vibrant = palette.vibrantSwatch?.rgb
+                val dominant = palette.dominantSwatch?.rgb
+
+                val colorInt = vibrant ?: dominant
+
+                if (colorInt != null) {
+                    dominantColor.value = Color(colorInt)
+                }
+            }
+        }
+    }
+
+    return dominantColor
 }

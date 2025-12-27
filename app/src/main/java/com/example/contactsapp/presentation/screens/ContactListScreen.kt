@@ -63,6 +63,31 @@ import com.example.contactsapp.presentation.components.SuccessMessageOverlay
 import com.example.contactsapp.presentation.contract.ContactEvent
 import com.example.contactsapp.presentation.contract.ContactState
 import kotlin.math.roundToInt
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.anchoredDraggable
+import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.animation.rememberSplineBasedDecay
+import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun ContactListScreen(
@@ -72,6 +97,8 @@ fun ContactListScreen(
     onContactClick: (Contact) -> Unit,
     onNavigateToDetail: () -> Unit
 ) {
+    var contactToDelete by remember { mutableStateOf<Contact?>(null) }
+
     val filteredContacts = remember(state.contacts, state.searchQuery) {
         state.contacts.filter {
             it.firstName.contains(state.searchQuery, ignoreCase = true) ||
@@ -83,6 +110,17 @@ fun ContactListScreen(
         filteredContacts
             .sortedBy { it.firstName }
             .groupBy { it.firstName.firstOrNull()?.uppercaseChar() ?: '#' }
+    }
+
+    if (contactToDelete != null) {
+        DeleteConfirmationSheet(
+            onDismiss = { contactToDelete = null },
+            onConfirm = {
+                onEvent(ContactEvent.OnContactSelected(contactToDelete!!))
+                onEvent(ContactEvent.OnDeleteContact)
+                contactToDelete = null
+            }
+        )
     }
 
     Scaffold(
@@ -120,8 +158,7 @@ fun ContactListScreen(
                                     onNavigateToDetail()
                                 },
                                 onDeleteClick = { contact ->
-                                    onEvent(ContactEvent.OnContactSelected(contact))
-                                    onEvent(ContactEvent.OnDeleteContact)
+                                    contactToDelete = contact
                                 }
                             )
                         }
@@ -139,6 +176,7 @@ fun ContactListScreen(
     }
 }
 
+
 @Composable
 fun ContactsHeader(onAddClick: () -> Unit) {
     Row(
@@ -154,7 +192,6 @@ fun ContactsHeader(onAddClick: () -> Unit) {
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )
-
         Box(
             modifier = Modifier
                 .size(36.dp)
@@ -188,7 +225,6 @@ fun ContactGroup(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
         )
-
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -217,7 +253,6 @@ fun ContactGroup(
 
 private enum class SwipeState { Closed, Open }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableContactItem(
     contact: Contact,
@@ -228,12 +263,12 @@ fun SwipeableContactItem(
     val density = LocalDensity.current
     val actionWidth = 140.dp
     val actionWidthPx = with(density) { actionWidth.toPx() }
+    val scope = rememberCoroutineScope()
 
-    // 1. Move this call OUTSIDE the remember block
     val decayAnimationSpec = rememberSplineBasedDecay<Float>()
 
     val state = remember {
-        AnchoredDraggableState<SwipeState>(
+        AnchoredDraggableState(
             initialValue = SwipeState.Closed,
             anchors = DraggableAnchors {
                 SwipeState.Closed at 0f
@@ -242,10 +277,10 @@ fun SwipeableContactItem(
             positionalThreshold = { distance -> distance * 0.5f },
             velocityThreshold = { with(density) { 100.dp.toPx() } },
             snapAnimationSpec = tween(),
-            // 2. Pass the variable here
             decayAnimationSpec = decayAnimationSpec
         )
     }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -261,12 +296,18 @@ fun SwipeableContactItem(
             SwipeActionButton(
                 color = Color(0xFF007AFF),
                 icon = Icons.Default.Edit,
-                onClick = onEditClick
+                onClick = {
+                    scope.launch { state.animateTo(SwipeState.Closed) }
+                    onEditClick()
+                }
             )
             SwipeActionButton(
                 color = Color(0xFFFF3B30),
                 icon = Icons.Default.Delete,
-                onClick = onDeleteClick
+                onClick = {
+                    scope.launch { state.animateTo(SwipeState.Closed) }
+                    onDeleteClick()
+                }
             )
         }
 
@@ -330,8 +371,8 @@ private fun ContactAvatar(contact: Contact) {
                     .size(46.dp)
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop,
-                placeholder = painterResource(id = R.drawable.ic_launcher_foreground),
-                error = painterResource(id = R.drawable.ic_launcher_foreground)
+                placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
+                error = painterResource(id = android.R.drawable.ic_menu_report_image)
             )
         } else {
             Box(
@@ -349,7 +390,6 @@ private fun ContactAvatar(contact: Contact) {
                 )
             }
         }
-
         if (contact.isSavedLocally) {
             Box(
                 modifier = Modifier
