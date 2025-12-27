@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.foundation.layout)
     implementation(libs.androidx.room.common.jvm)
+    implementation(libs.androidx.compose.animation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

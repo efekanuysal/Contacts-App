@@ -1,11 +1,19 @@
 package com.example.contactsapp.presentation.screens
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.rememberSplineBasedDecay
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,127 +36,34 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.room.Delete
 import coil.compose.AsyncImage
 import com.example.contactsapp.R
 import com.example.contactsapp.domain.model.Contact
 import com.example.contactsapp.presentation.components.SearchBar
+import com.example.contactsapp.presentation.components.SuccessMessageOverlay
 import com.example.contactsapp.presentation.contract.ContactEvent
 import com.example.contactsapp.presentation.contract.ContactState
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxState
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SwipeableContactItem(
-    contact: Contact,
-    onContactClick: (Contact) -> Unit,
-    onEditClick: (Contact) -> Unit,
-    onDeleteClick: (Contact) -> Unit
-) {
-    // 1. Use rememberSwipeToDismissBoxState instead of rememberDismissState
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = {
-            // We return false to prevent the item from actually being dismissed/removed
-            // from the UI tree immediately. We just want to reveal the background.
-            false
-        }
-    )
-
-    // 2. Use SwipeToDismissBox instead of SwipeToDismiss
-    SwipeToDismissBox(
-        state = dismissState,
-        // 3. Instead of 'directions = setOf(...)', use these booleans:
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true, // Only allow right-to-left swipe
-        backgroundContent = {
-            SwipeBackground(
-                dismissState = dismissState,
-                contact = contact,
-                onEditClick = onEditClick,
-                onDeleteClick = onDeleteClick
-            )
-        },
-        content = {
-            ContactItem(contact = contact, onClick = { onContactClick(contact) })
-        }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SwipeBackground(
-    dismissState: SwipeToDismissBoxState, // Updated type
-    contact: Contact,
-    onEditClick: (Contact) -> Unit,
-    onDeleteClick: (Contact) -> Unit
-) {
-    // 4. Check dismissDirection using SwipeToDismissBoxValue
-    if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFF2F2F7))
-                .padding(vertical = 12.dp, horizontal = 16.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Edit Button (Blue)
-            Box(
-                modifier = Modifier
-                    .width(70.dp)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-                    .background(Color(0xFF007AFF))
-                    .clickable { onEditClick(contact) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit",
-                    tint = Color.White
-                )
-            }
-
-            // Delete Button (Red)
-            // Note: You seemed to have cut off the Delete button code in your snippet,
-            // but assuming it follows the same pattern:
-            Box(
-                modifier = Modifier
-                    .width(70.dp)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp))
-                    .background(Color(0xFFFF3B30))
-                    .clickable { onDeleteClick(contact) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = Color.White
-                )
-            }
-        }
-    }
-}
 @Composable
 fun ContactListScreen(
     state: ContactState,
@@ -156,9 +72,11 @@ fun ContactListScreen(
     onContactClick: (Contact) -> Unit,
     onNavigateToDetail: () -> Unit
 ) {
-    val filteredContacts = state.contacts.filter {
-        it.firstName.contains(state.searchQuery, ignoreCase = true) ||
-                it.lastName.contains(state.searchQuery, ignoreCase = true)
+    val filteredContacts = remember(state.contacts, state.searchQuery) {
+        state.contacts.filter {
+            it.firstName.contains(state.searchQuery, ignoreCase = true) ||
+                    it.lastName.contains(state.searchQuery, ignoreCase = true)
+        }
     }
 
     val groupedContacts = remember(filteredContacts) {
@@ -169,9 +87,7 @@ fun ContactListScreen(
 
     Scaffold(
         containerColor = Color(0xFFF2F2F7),
-        topBar = {
-            ContactsHeader(onAddClick = onNavigateToAdd)
-        }
+        topBar = { ContactsHeader(onAddClick = onNavigateToAdd) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -199,13 +115,11 @@ fun ContactListScreen(
                                 contacts = contacts,
                                 onContactClick = onContactClick,
                                 onEditClick = { contact ->
-                                    // Select the contact and navigate to detail in edit mode
                                     onEvent(ContactEvent.OnContactSelected(contact))
                                     onEvent(ContactEvent.OnToggleEditMode)
                                     onNavigateToDetail()
                                 },
                                 onDeleteClick = { contact ->
-                                    // Select the contact and trigger delete
                                     onEvent(ContactEvent.OnContactSelected(contact))
                                     onEvent(ContactEvent.OnDeleteContact)
                                 }
@@ -285,11 +199,11 @@ fun ContactGroup(
                     SwipeableContactItem(
                         contact = contact,
                         onContactClick = onContactClick,
-                        onEditClick = onEditClick,
-                        onDeleteClick = onDeleteClick
+                        onEditClick = { onEditClick(contact) },
+                        onDeleteClick = { onDeleteClick(contact) }
                     )
                     if (index < contacts.lastIndex) {
-                        Divider(
+                        HorizontalDivider(
                             color = Color(0xFFE5E5EA),
                             thickness = 1.dp,
                             modifier = Modifier.padding(start = 76.dp)
@@ -298,6 +212,95 @@ fun ContactGroup(
                 }
             }
         }
+    }
+}
+
+private enum class SwipeState { Closed, Open }
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SwipeableContactItem(
+    contact: Contact,
+    onContactClick: (Contact) -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val density = LocalDensity.current
+    val actionWidth = 140.dp
+    val actionWidthPx = with(density) { actionWidth.toPx() }
+
+    // 1. Move this call OUTSIDE the remember block
+    val decayAnimationSpec = rememberSplineBasedDecay<Float>()
+
+    val state = remember {
+        AnchoredDraggableState<SwipeState>(
+            initialValue = SwipeState.Closed,
+            anchors = DraggableAnchors {
+                SwipeState.Closed at 0f
+                SwipeState.Open at -actionWidthPx
+            },
+            positionalThreshold = { distance -> distance * 0.5f },
+            velocityThreshold = { with(density) { 100.dp.toPx() } },
+            snapAnimationSpec = tween(),
+            // 2. Pass the variable here
+            decayAnimationSpec = decayAnimationSpec
+        )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(actionWidth)
+                .fillMaxHeight(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            SwipeActionButton(
+                color = Color(0xFF007AFF),
+                icon = Icons.Default.Edit,
+                onClick = onEditClick
+            )
+            SwipeActionButton(
+                color = Color(0xFFFF3B30),
+                icon = Icons.Default.Delete,
+                onClick = onDeleteClick
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(state.requireOffset().roundToInt(), 0) }
+                .anchoredDraggable(state, Orientation.Horizontal)
+                .background(Color.White)
+        ) {
+            ContactItem(contact = contact, onClick = { onContactClick(contact) })
+        }
+    }
+}
+
+@Composable
+private fun SwipeActionButton(
+    color: Color,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .width(70.dp)
+            .fillMaxHeight()
+            .background(color)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White
+        )
     }
 }
 
@@ -310,62 +313,77 @@ fun ContactItem(contact: Contact, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(contentAlignment = Alignment.BottomEnd) {
-            // Avatar Logic (unchanged)
-            if (contact.photoUri != null && contact.photoUri.toString().isNotEmpty()) {
-                AsyncImage(
-                    model = contact.photoUri,
-                    contentDescription = null,
-                    modifier = Modifier.size(46.dp).clip(CircleShape),
-                    contentScale = ContentScale.Crop,
-                    placeholder = painterResource(id = R.drawable.ic_launcher_foreground),
-                    error = painterResource(id = R.drawable.ic_launcher_foreground)
-                )
-            } else {
-                Box(
-                    modifier = Modifier.size(46.dp).clip(CircleShape).background(Color(0xFFE1F5FE)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = contact.firstName.take(1).uppercase(), color = Color(0xFF007AFF), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
-            }
+        ContactAvatar(contact)
+        Spacer(modifier = Modifier.width(16.dp))
+        ContactInfo(contact)
+    }
+}
 
-            // Phone Icon Overlay for saved contacts
-            if (contact.isSavedLocally) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF007AFF))
-                        .border(1.dp, Color.White, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Phone,
-                        contentDescription = "Saved to phone",
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
+@Composable
+private fun ContactAvatar(contact: Contact) {
+    Box(contentAlignment = Alignment.BottomEnd) {
+        if (contact.photoUri != null && contact.photoUri.toString().isNotEmpty()) {
+            AsyncImage(
+                model = contact.photoUri,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop,
+                placeholder = painterResource(id = R.drawable.ic_launcher_foreground),
+                error = painterResource(id = R.drawable.ic_launcher_foreground)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFE1F5FE)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = contact.firstName.take(1).uppercase(),
+                    color = Color(0xFF007AFF),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
             }
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column {
-            Text(
-                text = "${contact.firstName} ${contact.lastName}",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 17.sp,
-                color = Color.Black
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = contact.phoneNumber,
-                fontSize = 14.sp,
-                color = Color.Gray
-            )
+        if (contact.isSavedLocally) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF007AFF))
+                    .border(1.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Phone,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
     }
 }
 
+@Composable
+private fun ContactInfo(contact: Contact) {
+    Column {
+        Text(
+            text = "${contact.firstName} ${contact.lastName}",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 17.sp,
+            color = Color.Black
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = contact.phoneNumber,
+            fontSize = 14.sp,
+            color = Color.Gray
+        )
+    }
+}
