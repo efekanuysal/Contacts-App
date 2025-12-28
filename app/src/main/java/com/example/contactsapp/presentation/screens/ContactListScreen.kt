@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -174,9 +175,7 @@ fun ContactListScreen(
                             }
                         }
                     } else if (state.contacts.isEmpty() && !state.isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No contacts yet.", color = Color.Gray)
-                        }
+                        NoContactsView(onCreateClick = onNavigateToAdd)
                     }
                 }
             }
@@ -545,5 +544,48 @@ private fun ContactInfo(contact: Contact) {
             fontSize = 14.sp,
             color = Color.Gray
         )
+    }
+}
+
+@Composable
+fun NoContactsView(onCreateClick: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.weight(0.3f))
+
+        Icon(
+            imageVector = Icons.Outlined.Person,
+            contentDescription = null,
+            tint = Color.LightGray,
+            modifier = Modifier.size(80.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No Contacts",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Contacts you've added will appear here.",
+            fontSize = 14.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Create New Contact",
+            color = Color(0xFF007AFF), 
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable { onCreateClick() }
+        )
+
+        Spacer(modifier = Modifier.weight(0.7f))
     }
 }
