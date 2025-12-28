@@ -303,7 +303,8 @@ fun rememberDominantColor(
     imageUri: Uri?,
     defaultColor: Color = Color.LightGray
 ): State<Color> {
-    val dominantColor = remember { mutableStateOf(defaultColor) }
+    // imageUri değiştiğinde state'i sıfırlamak için remember anahtarı eklendi
+    val dominantColor = remember(imageUri) { mutableStateOf(defaultColor) }
 
     LaunchedEffect(imageUri) {
         if (imageUri == null) {
@@ -312,28 +313,34 @@ fun rememberDominantColor(
         }
 
         withContext(Dispatchers.IO) {
-            val loader = ImageLoader(context)
-            val request = ImageRequest.Builder(context)
-                .data(imageUri)
-                .allowHardware(false)
-                .size(100)
-                .build()
+            try {
+                val loader = ImageLoader(context)
+                val request = ImageRequest.Builder(context)
+                    .data(imageUri)
+                    .allowHardware(false)
+                    .size(100)
+                    .build()
 
-            val result = loader.execute(request)
+                val result = loader.execute(request)
 
-            if (result is SuccessResult) {
-                val bitmap = (result.drawable as BitmapDrawable).bitmap
-                val palette = Palette.from(bitmap).generate()
+                if (result is SuccessResult) {
+                    // Güvenli cast işlemi
+                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                    if (bitmap != null) {
+                        val palette = Palette.from(bitmap).generate()
+                        val colorInt = palette.vibrantSwatch?.rgb
+                            ?: palette.darkVibrantSwatch?.rgb
+                            ?: palette.lightVibrantSwatch?.rgb
+                            ?: palette.mutedSwatch?.rgb
+                            ?: palette.dominantSwatch?.rgb
 
-                val colorInt = palette.vibrantSwatch?.rgb
-                    ?: palette.darkVibrantSwatch?.rgb
-                    ?: palette.lightVibrantSwatch?.rgb
-                    ?: palette.mutedSwatch?.rgb
-                    ?: palette.dominantSwatch?.rgb
-
-                if (colorInt != null) {
-                    dominantColor.value = Color(colorInt)
+                        if (colorInt != null) {
+                            dominantColor.value = Color(colorInt)
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                // Hata durumunda varsayılan renk korunur
             }
         }
     }

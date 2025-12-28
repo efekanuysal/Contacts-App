@@ -93,6 +93,9 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                         isImagePickerBottomSheetOpen = false
                     )
                 }
+                if (_state.value.selectedContact != null) {
+                    updateContact()
+                }
             }
             ContactEvent.OnSaveContact -> {
                 saveContact()

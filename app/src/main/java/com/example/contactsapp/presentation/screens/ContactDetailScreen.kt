@@ -198,7 +198,6 @@ fun ContactDetailScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.clickable(
-                        enabled = state.isEditMode,
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { onEvent(ContactEvent.OnAddPhotoClicked) }
@@ -206,8 +205,7 @@ fun ContactDetailScreen(
                     ProfileImagePicker(
                         imageUri = state.selectedImageUri,
                         onClick = {
-                            if (state.isEditMode) onEvent(ContactEvent.OnAddPhotoClicked)
-                        }
+                            onEvent(ContactEvent.OnAddPhotoClicked)                        }
                     )
                 }
             }
@@ -219,8 +217,8 @@ fun ContactDetailScreen(
                 color = Color(0xFF007AFF),
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
-                modifier = Modifier.clickable(enabled = state.isEditMode) {
-                    if (state.isEditMode) onEvent(ContactEvent.OnAddPhotoClicked)
+                modifier = Modifier.clickable{
+                    onEvent(ContactEvent.OnAddPhotoClicked)
                 }
             )
 
