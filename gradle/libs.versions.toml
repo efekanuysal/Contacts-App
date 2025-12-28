@@ -19,6 +19,7 @@ foundationLayout = "1.10.0"
 roomCommonJvm = "2.8.4"
 animation = "1.10.0"
 palette = "1.0.0"
+lottie = "6.3.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -48,6 +49,7 @@ androidx-compose-foundation-layout = { group = "androidx.compose.foundation", na
 androidx-room-common-jvm = { group = "androidx.room", name = "room-common-jvm", version.ref = "roomCommonJvm" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
+lottie-compose = { module = "com.airbnb.android:lottie-compose", version.ref = "lottie"}
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

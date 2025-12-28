@@ -309,7 +309,7 @@ fun ContactsHeader(
             color = Color.Black,
             modifier = Modifier.clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null 
+                indication = null
             ) { onTitleClick() }
         )
         Box(
