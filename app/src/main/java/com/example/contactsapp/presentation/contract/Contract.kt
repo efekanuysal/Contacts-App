@@ -39,6 +39,7 @@ sealed interface ContactEvent {
     data object OnSaveContact : ContactEvent
     data object OnResetSaveState : ContactEvent
     data class OnContactSelected(val contact: Contact) : ContactEvent
+    data object OnAddNewContact : ContactEvent
     data object OnToggleEditMode : ContactEvent
     data object OnUpdateContact : ContactEvent
     data object OnDeleteContact : ContactEvent

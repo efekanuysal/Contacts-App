@@ -8,11 +8,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import coil.ImageLoader
-import coil.ImageLoaderFactory
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import com.example.contactsapp.data.remote.RetrofitClient
 import com.example.contactsapp.presentation.contract.ContactEvent
 import com.example.contactsapp.presentation.screens.AddContactScreen
 import com.example.contactsapp.presentation.screens.ContactDetailScreen
@@ -33,7 +28,10 @@ class MainActivity : ComponentActivity() {
                     ContactListScreen(
                         state = state,
                         onEvent = viewModel::onEvent,
-                        onNavigateToAdd = { navController.navigate("add_contact") },
+                        onNavigateToAdd = {
+                            viewModel.onEvent(ContactEvent.OnAddNewContact)
+                            navController.navigate("add_contact")
+                        },
                         onContactClick = { contact ->
                             viewModel.onEvent(ContactEvent.OnContactSelected(contact))
                             navController.navigate("contact_detail")
@@ -74,5 +72,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
 }

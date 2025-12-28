@@ -76,7 +76,7 @@ fun ContactListScreen(
 
     val groupedContacts = remember(filteredContacts) {
         filteredContacts
-            .sortedBy { it.firstName }
+            .sortedBy { it.firstName.lowercase() }
             .groupBy { it.firstName.firstOrNull()?.uppercaseChar() ?: '#' }
     }
 
@@ -298,6 +298,7 @@ fun ContactsHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp) // Added horizontal padding for alignment
             .padding(top = 16.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -314,7 +315,7 @@ fun ContactsHeader(
         )
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(27.dp)
                 .clip(CircleShape)
                 .background(Color(0xFF007AFF))
                 .clickable { onAddClick() },
@@ -324,12 +325,11 @@ fun ContactsHeader(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Add Contact",
                 tint = Color.White,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
 }
-
 @Composable
 fun ContactGroup(
     initial: Char,

@@ -101,7 +101,6 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                 _state.update { it.copy(isContactSaved = false) }
             }
             is ContactEvent.OnContactSelected -> {
-                // If selection happens during a search, save query to history
                 if (_state.value.isSearchActive && _state.value.searchQuery.isNotBlank()) {
                     val currentHistory = _state.value.previousSearches.toMutableList()
                     val query = _state.value.searchQuery.trim()
@@ -122,6 +121,21 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                         successMessage = null,
                         isMenuExpanded = false,
                         isContactSaved = false
+                    )
+                }
+            }
+            ContactEvent.OnAddNewContact -> {
+                _state.update {
+                    it.copy(
+                        selectedContact = null,
+                        firstNameInput = "",
+                        lastNameInput = "",
+                        phoneNumberInput = "",
+                        selectedImageUri = null,
+                        isEditMode = false,
+                        isContactSaved = false,
+                        errorMessage = null,
+                        successMessage = null
                     )
                 }
             }
@@ -158,7 +172,6 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun handleOtherEvents(event: ContactEvent) {
-        // Fallback for events not handled in the main block
         when (event) {
             ContactEvent.OnDismissImagePickerBottomSheet -> {
                 _state.update { it.copy(isImagePickerBottomSheetOpen = false) }
