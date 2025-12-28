@@ -3,6 +3,8 @@ package com.example.contactsapp.data.repository
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.ContactsContract
 import android.webkit.MimeTypeMap
@@ -34,7 +36,6 @@ class ContactRepositoryImpl(
                         lastName = dto.lastName,
                         phoneNumber = dto.phoneNumber,
                         photoUri = if (!dto.profileImageUrl.isNullOrEmpty()) Uri.parse(dto.profileImageUrl) else null,
-                        // Check local storage for each contact
                         isSavedLocally = isContactStoredInPhone(dto.phoneNumber)
                     )
                 }
@@ -55,7 +56,8 @@ class ContactRepositoryImpl(
     ): Result<Unit> {
         return try {
             val imageUrl = if (imageUri != null) {
-                uploadImage(imageUri) ?: return Result.failure(Exception("Image upload failed or returned empty URL"))
+                uploadImage(imageUri)
+                    ?: return Result.failure(Exception("Image upload failed or returned empty URL"))
             } else {
                 ""
             }
@@ -79,50 +81,6 @@ class ContactRepositoryImpl(
         }
     }
 
-    private suspend fun uploadImage(uri: Uri): String? {
-        val mimeType = getMimeType(uri)
-        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
-        val file = uriToFile(uri, extension) ?: return null
-
-        val requestFile = file.asRequestBody(mimeType.toMediaTypeOrNull())
-        val body = MultipartBody.Part.createFormData("image", file.name, requestFile)
-
-        try {
-            val response = api.uploadImage(body)
-
-            // Check HTTP success AND API logical success
-            if (response.isSuccessful && response.body()?.success == true) {
-                return response.body()?.data?.imageUrl
-            } else {
-                println("Upload failed: HTTP ${response.code()} / API Success: ${response.body()?.success}")
-                return null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return null
-        }
-    }
-
-    private fun uriToFile(uri: Uri, extension: String): File? {
-        val contentResolver = context.contentResolver
-        val tempFile = File.createTempFile("upload_${System.currentTimeMillis()}", ".$extension", context.cacheDir)
-
-        try {
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                FileOutputStream(tempFile).use { outputStream ->
-                    inputStream.copyTo(outputStream)
-                }
-            }
-            return tempFile
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return null
-        }
-    }
-
-    private fun getMimeType(uri: Uri): String {
-        return context.contentResolver.getType(uri) ?: "image/jpeg"
-    }
     override suspend fun updateContact(
         id: String,
         firstName: String,
@@ -131,8 +89,6 @@ class ContactRepositoryImpl(
         imageUri: Uri?
     ): Result<Unit> {
         return try {
-            // Logic: If URI is http, it's an existing remote URL, reuse it.
-            // If it's a file/content URI, upload it first.
             val imageUrl = if (imageUri != null && imageUri.scheme?.startsWith("http") == false) {
                 uploadImage(imageUri) ?: return Result.failure(Exception("Image upload failed"))
             } else {
@@ -166,11 +122,14 @@ class ContactRepositoryImpl(
     }
 
     override fun isContactStoredInPhone(phoneNumber: String): Boolean {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             return false
         }
 
-        // Use Uri.encode to handle special characters like '#' or '+' correctly
         val uri = Uri.withAppendedPath(
             ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
             Uri.encode(phoneNumber)
@@ -186,5 +145,86 @@ class ContactRepositoryImpl(
             e.printStackTrace()
         }
         return false
+    }
+
+    private suspend fun uploadImage(uri: Uri): String? {
+        val mimeType = getMimeType(uri)
+        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
+        val file = uriToFile(uri, extension) ?: return null
+
+        val requestFile = file.asRequestBody(mimeType.toMediaTypeOrNull())
+        val body = MultipartBody.Part.createFormData("image", file.name, requestFile)
+
+        try {
+            val response = api.uploadImage(body)
+            if (response.isSuccessful && response.body()?.success == true) {
+                return response.body()?.data?.imageUrl
+            } else {
+                return null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    private fun uriToFile(uri: Uri, extension: String): File? {
+        val tempFile = File.createTempFile(
+            "upload_${System.currentTimeMillis()}",
+            ".$extension",
+            context.cacheDir
+        )
+
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return null
+                val scaledBitmap = resizeBitmap(originalBitmap, 1024)
+
+                FileOutputStream(tempFile).use { outputStream ->
+                    val compressFormat = if (extension.equals("png", ignoreCase = true)) {
+                        Bitmap.CompressFormat.PNG
+                    } else {
+                        Bitmap.CompressFormat.JPEG
+                    }
+                    scaledBitmap.compress(compressFormat, 80, outputStream)
+                }
+
+                if (originalBitmap != scaledBitmap) {
+                    originalBitmap.recycle()
+                }
+                scaledBitmap.recycle()
+            }
+            return tempFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    private fun resizeBitmap(bitmap: Bitmap, maxDimension: Int): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+
+        if (width <= maxDimension && height <= maxDimension) {
+            return bitmap
+        }
+
+        val ratio = width.toFloat() / height.toFloat()
+        val newWidth: Int
+        val newHeight: Int
+
+        if (width > height) {
+            newWidth = maxDimension
+            newHeight = (newWidth / ratio).toInt()
+        } else {
+            newHeight = maxDimension
+            newWidth = (newHeight * ratio).toInt()
+        }
+
+        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+    }
+
+    private fun getMimeType(uri: Uri): String {
+        return context.contentResolver.getType(uri) ?: "image/jpeg"
     }
 }
