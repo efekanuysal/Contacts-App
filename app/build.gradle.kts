@@ -1,10 +1,21 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
-val apiKey: String = project.findProperty("API_KEY") as String? ?: ""
-val baseUrl: String = project.findProperty("BASE_URL") as String? ?: ""
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
+val apiKey: String = localProperties.getProperty("API_KEY") ?: ""
+val baseUrl: String = localProperties.getProperty("BASE_URL") ?: ""
+
 android {
     namespace = "com.example.contactsapp"
     compileSdk = 36
@@ -18,16 +29,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField(
-            "String",
-            "API_KEY",
-            "\"$apiKey\""
-        )
-        buildConfigField(
-            "String",
-            "BASE_URL",
-            "\"$baseUrl\""
-        )
+        buildConfigField("String", "API_KEY", "\"$apiKey\"")
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {

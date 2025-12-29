@@ -1,5 +1,6 @@
 package com.example.contactsapp.data.remote
 
+import com.example.contactsapp.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -12,10 +13,8 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 object RetrofitClient {
-    private const val BASE_URL = "https://146.59.52.68:11234/"
-    private const val API_KEY = "89314dc5-56df-4ebb-940a-ebad15a169a9"
 
-    val unsafeOkHttpClient: OkHttpClient by lazy {
+     val unsafeOkHttpClient: OkHttpClient by lazy {
         val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -27,7 +26,7 @@ object RetrofitClient {
 
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder()
-                .addHeader("ApiKey", API_KEY)
+                .addHeader("ApiKey", BuildConfig.API_KEY)
                 .addHeader("accept", "text/plain")
                 .build()
             chain.proceed(request)
@@ -41,10 +40,9 @@ object RetrofitClient {
             .build()
     }
 
-    // 2. Use the exposed client here
     val api: ContactApi by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BuildConfig.BASE_URL)
             .client(unsafeOkHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
