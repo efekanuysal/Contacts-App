@@ -1,6 +1,7 @@
 package com.example.contactsapp.presentation.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,7 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -32,10 +33,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,10 +66,10 @@ import androidx.core.content.ContextCompat
 import com.example.contactsapp.presentation.components.ContactInputField
 import com.example.contactsapp.presentation.components.ImageSourceDialog
 import com.example.contactsapp.presentation.components.ProfileImagePicker
+import com.example.contactsapp.presentation.components.SuccessMessageOverlay
 import com.example.contactsapp.presentation.components.rememberDominantColor
 import com.example.contactsapp.presentation.contract.ContactEvent
 import com.example.contactsapp.presentation.contract.ContactState
-import kotlinx.coroutines.delay
 
 @Composable
 fun ContactDetailScreen(
@@ -78,6 +79,14 @@ fun ContactDetailScreen(
 ) {
     val context = LocalContext.current
     var isDeleteConfirmationVisible by remember { mutableStateOf(false) }
+    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Fix: Navigate back when shouldNavigateBack is true
+    LaunchedEffect(state.shouldNavigateBack) {
+        if (state.shouldNavigateBack) {
+            onNavigateBack()
+        }
+    }
 
     val dominantColorState = rememberDominantColor(
         context = context,
@@ -89,24 +98,22 @@ fun ContactDetailScreen(
         if (ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.READ_CONTACTS
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) == PackageManager.PERMISSION_GRANTED
         ) {
             onEvent(ContactEvent.OnCheckLocalContactStatus)
         }
     }
 
-    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
-
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        onEvent(ContactEvent.OnImageUriSelected(uri))
+        uri?.let { onEvent(ContactEvent.OnImageUriSelected(it)) }
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success) onEvent(ContactEvent.OnImageUriSelected(tempPhotoUri))
+        if (success) tempPhotoUri?.let { onEvent(ContactEvent.OnImageUriSelected(it)) }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -151,7 +158,7 @@ fun ContactDetailScreen(
         topBar = {
             if (state.isEditMode) {
                 EditModeTopBar(
-                    onCancel = { onEvent(ContactEvent.OnContactSelected(state.selectedContact!!)) },
+                    onCancel = { state.selectedContact?.let { onEvent(ContactEvent.OnContactSelected(it)) } },
                     onDone = { onEvent(ContactEvent.OnUpdateContact) }
                 )
             } else {
@@ -165,149 +172,151 @@ fun ContactDetailScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
-
-            val showGradient = state.selectedImageUri != null && dominantColorState.value != Color.Transparent
-
-            Box(
-                contentAlignment = Alignment.Center,
+            Column(
                 modifier = Modifier
-                    .size(160.dp)
-                    .then(
-                        if (showGradient) {
-                            Modifier.background(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        dominantColorState.value.copy(alpha = 0.65f),
-                                        dominantColorState.value.copy(alpha = 0.25f),
-                                        Color.Transparent
-                                    )
-                                ),
-                                shape = CircleShape
-                            )
-                        } else Modifier
-                    )
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onEvent(ContactEvent.OnAddPhotoClicked) }
-                ) {
-                    ProfileImagePicker(
-                        imageUri = state.selectedImageUri,
-                        onClick = {
-                            onEvent(ContactEvent.OnAddPhotoClicked)                        }
-                    )
-                }
-            }
+                Spacer(modifier = Modifier.height(32.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
+                val showGradient = state.selectedImageUri != null && dominantColorState.value != Color.Transparent
 
-            Text(
-                text = "Change Photo",
-                color = Color(0xFF007AFF),
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier.clickable{
-                    onEvent(ContactEvent.OnAddPhotoClicked)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            if (state.isEditMode) {
-                ContactInputField(
-                    value = state.firstNameInput,
-                    onValueChange = { onEvent(ContactEvent.OnFirstNameChanged(it)) },
-                    placeholder = "First Name"
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                ContactInputField(
-                    value = state.lastNameInput,
-                    onValueChange = { onEvent(ContactEvent.OnLastNameChanged(it)) },
-                    placeholder = "Last Name"
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                ContactInputField(
-                    value = state.phoneNumberInput,
-                    onValueChange = { onEvent(ContactEvent.OnPhoneNumberChanged(it)) },
-                    placeholder = "Phone Number",
-                    keyboardType = KeyboardType.Phone
-                )
-            } else {
-                ReadOnlyField(text = state.firstNameInput)
-                Spacer(modifier = Modifier.height(16.dp))
-                ReadOnlyField(text = state.lastNameInput)
-                Spacer(modifier = Modifier.height(16.dp))
-                ReadOnlyField(text = state.phoneNumberInput)
-
-                Spacer(modifier = Modifier.height(48.dp))
-
-                val isButtonEnabled = !state.isContactSaved
-                OutlinedButton(
-                    onClick = {
-                        if (!state.isContactSaved) {
-                            contactPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.READ_CONTACTS,
-                                    Manifest.permission.WRITE_CONTACTS
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(160.dp)
+                        .then(
+                            if (showGradient) {
+                                Modifier.background(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            dominantColorState.value.copy(alpha = 0.65f),
+                                            dominantColorState.value.copy(alpha = 0.25f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    shape = CircleShape
                                 )
+                            } else Modifier
+                        )
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onEvent(ContactEvent.OnAddPhotoClicked) }
+                    ) {
+                        ProfileImagePicker(
+                            imageUri = state.selectedImageUri,
+                            onClick = { onEvent(ContactEvent.OnAddPhotoClicked) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Change Photo",
+                    color = Color(0xFF007AFF),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable { onEvent(ContactEvent.OnAddPhotoClicked) }
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                if (state.isEditMode) {
+                    ContactInputField(
+                        value = state.firstNameInput,
+                        onValueChange = { onEvent(ContactEvent.OnFirstNameChanged(it)) },
+                        placeholder = "First Name"
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ContactInputField(
+                        value = state.lastNameInput,
+                        onValueChange = { onEvent(ContactEvent.OnLastNameChanged(it)) },
+                        placeholder = "Last Name"
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ContactInputField(
+                        value = state.phoneNumberInput,
+                        onValueChange = { onEvent(ContactEvent.OnPhoneNumberChanged(it)) },
+                        placeholder = "Phone Number",
+                        keyboardType = KeyboardType.Phone
+                    )
+                } else {
+                    ReadOnlyField(text = state.firstNameInput)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ReadOnlyField(text = state.lastNameInput)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ReadOnlyField(text = state.phoneNumberInput)
+
+                    Spacer(modifier = Modifier.height(48.dp))
+
+                    val isButtonEnabled = !state.isContactSaved
+                    OutlinedButton(
+                        onClick = {
+                            if (!state.isContactSaved) {
+                                contactPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.READ_CONTACTS,
+                                        Manifest.permission.WRITE_CONTACTS
+                                    )
+                                )
+                            }
+                        },
+                        enabled = isButtonEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(30.dp),
+                        border = if (isButtonEnabled) BorderStroke(
+                            1.dp,
+                            Color.Black
+                        ) else BorderStroke(1.dp, Color.LightGray),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (isButtonEnabled) Color.Black else Color.LightGray
+                        )
+                    ) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (state.isContactSaved) "Saved to Phone" else "Save to My Phone Contact",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (state.isContactSaved) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "This contact is already saved your phone.",
+                                color = Color.Gray,
+                                fontSize = 12.sp
                             )
                         }
-                    },
-                    enabled = isButtonEnabled,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(30.dp),
-                    border = if (isButtonEnabled) BorderStroke(
-                        1.dp,
-                        Color.Black
-                    ) else BorderStroke(1.dp, Color.LightGray),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (isButtonEnabled) Color.Black else Color.LightGray
-                    )
-                ) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (state.isContactSaved) "Saved to Phone" else "Save to My Phone Contact",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (state.isContactSaved) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.Gray,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            "This contact is already saved your phone.",
-                            color = Color.Gray,
-                            fontSize = 12.sp
-                        )
                     }
                 }
             }
 
             if (state.globalSuccessMessage != null) {
                 SuccessMessageOverlay(
-                    message = state.globalSuccessMessage,
+                    message = state.globalSuccessMessage!!,
                     onDismiss = { onEvent(ContactEvent.OnClearGlobalSuccessMessage) }
                 )
             }
@@ -315,6 +324,7 @@ fun ContactDetailScreen(
     }
 }
 
+// ... Rest of the helper composables (ViewModeTopBar, etc.) remain unchanged from previous version ...
 @Composable
 fun ViewModeTopBar(
     onBack: () -> Unit,
@@ -331,7 +341,7 @@ fun ViewModeTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
         }
         Box {
             IconButton(onClick = { onMenuToggle(true) }) {
@@ -387,7 +397,7 @@ fun StyledDropdownMenu(
                     trailingIconColor = Color.Black
                 )
             )
-            Divider(color = Color(0xFFF0F0F0), thickness = 1.dp)
+            HorizontalDivider(color = Color(0xFFF0F0F0), thickness = 1.dp)
             DropdownMenuItem(
                 text = { Text("Delete", color = Color(0xFFFF3B30), fontSize = 16.sp) },
                 onClick = onDeleteClick,
@@ -524,43 +534,5 @@ fun ReadOnlyField(text: String) {
         contentAlignment = Alignment.CenterStart
     ) {
         Text(text = text, fontSize = 16.sp, color = Color.Black)
-    }
-}
-
-@Composable
-fun SuccessMessageOverlay(message: String, onDismiss: () -> Unit) {
-    LaunchedEffect(message) {
-        delay(2000)
-        onDismiss()
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 32.dp),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = null,
-                    tint = Color(0xFF00C853)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = message,
-                    color = Color(0xFF00C853),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
     }
 }

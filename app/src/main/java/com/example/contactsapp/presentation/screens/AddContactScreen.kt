@@ -51,6 +51,7 @@ import com.example.contactsapp.presentation.components.ImageSourceDialog
 import com.example.contactsapp.presentation.components.ProfileImagePicker
 import com.example.contactsapp.presentation.contract.ContactEvent
 import com.example.contactsapp.presentation.contract.ContactState
+import com.example.contactsapp.presentation.components.SuccessMessageOverlay
 import java.io.File
 import java.util.UUID
 

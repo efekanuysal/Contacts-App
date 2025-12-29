@@ -2,6 +2,7 @@ package com.example.contactsapp.presentation.screens
 
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.rememberSplineBasedDecay
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,11 +60,8 @@ fun ContactListScreen(
     onNavigateToDetail: () -> Unit
 ) {
     var contactToDelete by remember { mutableStateOf<Contact?>(null) }
-
-    // Added FocusManager to handle keyboard dismissal
     val focusManager = LocalFocusManager.current
 
-    // Advanced search logic: Supports "First Name space Last Name"
     val filteredContacts = remember(state.contacts, state.searchQuery) {
         if (state.searchQuery.isBlank()) {
             state.contacts
@@ -98,7 +96,6 @@ fun ContactListScreen(
             ContactsHeader(
                 onAddClick = onNavigateToAdd,
                 onTitleClick = {
-                    // Reset logic: Clear query, clear focus (closes history), dismiss keyboard
                     onEvent(ContactEvent.OnSearchQueryChanged(""))
                     onEvent(ContactEvent.OnSearchFocusChanged(false))
                     focusManager.clearFocus()
@@ -106,83 +103,83 @@ fun ContactListScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        // Fix: Use Box as root to layer SuccessMessageOverlay on top
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-                // Optional: Clear focus when clicking background to close keyboard/history
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    focusManager.clearFocus()
-                }
         ) {
-            SearchBar(
-                query = state.searchQuery,
-                onQueryChanged = { onEvent(ContactEvent.OnSearchQueryChanged(it)) },
-                onFocusChanged = { onEvent(ContactEvent.OnSearchFocusChanged(it)) }
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        focusManager.clearFocus()
+                    }
+            ) {
+                SearchBar(
+                    query = state.searchQuery,
+                    onQueryChanged = { onEvent(ContactEvent.OnSearchQueryChanged(it)) },
+                    onFocusChanged = { onEvent(ContactEvent.OnSearchFocusChanged(it)) }
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // State Logic (Preserved Exactly as requested):
-            // 1. Search Active & Empty Query -> Show History
-            // 2. Search Active & Query Exists & No Results -> Show Error
-            // 3. Search Active & Query Exists & Results -> Show Results
-            // 4. Default -> Show All Contacts
+                when {
+                    state.isSearchActive && state.searchQuery.isEmpty() && state.previousSearches.isNotEmpty() -> {
+                        PreviousSearchesList(
+                            searches = state.previousSearches,
+                            onSearchClick = { onEvent(ContactEvent.OnSearchQueryChanged(it)) },
+                            onRemoveClick = { onEvent(ContactEvent.OnRemoveSearchHistoryItem(it)) },
+                            onClearAllClick = { onEvent(ContactEvent.OnClearSearchHistory) }
+                        )
+                    }
 
-            when {
-                state.isSearchActive && state.searchQuery.isEmpty() && state.previousSearches.isNotEmpty() -> {
-                    PreviousSearchesList(
-                        searches = state.previousSearches,
-                        onSearchClick = { onEvent(ContactEvent.OnSearchQueryChanged(it)) },
-                        onRemoveClick = { onEvent(ContactEvent.OnRemoveSearchHistoryItem(it)) },
-                        onClearAllClick = { onEvent(ContactEvent.OnClearSearchHistory) }
-                    )
-                }
+                    state.searchQuery.isNotEmpty() && filteredContacts.isEmpty() -> {
+                        NoMatchesFoundView()
+                    }
 
-                state.searchQuery.isNotEmpty() && filteredContacts.isEmpty() -> {
-                    NoMatchesFoundView()
-                }
-
-                else -> {
-                    if (filteredContacts.isNotEmpty()) {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            contentPadding = PaddingValues(bottom = 80.dp)
-                        ) {
-                            groupedContacts.forEach { (initial, contacts) ->
-                                item {
-                                    ContactGroup(
-                                        initial = initial,
-                                        contacts = contacts,
-                                        onContactClick = { contact ->
-                                            onContactClick(contact)
-                                        },
-                                        onEditClick = { contact ->
-                                            onEvent(ContactEvent.OnContactSelected(contact))
-                                            onEvent(ContactEvent.OnToggleEditMode)
-                                            onNavigateToDetail()
-                                        },
-                                        onDeleteClick = { contact ->
-                                            contactToDelete = contact
-                                        }
-                                    )
+                    else -> {
+                        if (filteredContacts.isNotEmpty()) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                contentPadding = PaddingValues(bottom = 80.dp)
+                            ) {
+                                groupedContacts.forEach { (initial, contacts) ->
+                                    item {
+                                        ContactGroup(
+                                            initial = initial,
+                                            contacts = contacts,
+                                            onContactClick = { contact ->
+                                                onContactClick(contact)
+                                            },
+                                            onEditClick = { contact ->
+                                                onEvent(ContactEvent.OnContactSelected(contact))
+                                                onEvent(ContactEvent.OnToggleEditMode)
+                                                onNavigateToDetail()
+                                            },
+                                            onDeleteClick = { contact ->
+                                                contactToDelete = contact
+                                            }
+                                        )
+                                    }
                                 }
                             }
+                        } else if (state.contacts.isEmpty() && !state.isLoading) {
+                            NoContactsView(onCreateClick = onNavigateToAdd)
                         }
-                    } else if (state.contacts.isEmpty() && !state.isLoading) {
-                        NoContactsView(onCreateClick = onNavigateToAdd)
                     }
                 }
             }
 
+            // Fix: Overlay is now a sibling of Column within the Box, ensuring visibility
             if (state.globalSuccessMessage != null) {
                 SuccessMessageOverlay(
-                    message = state.globalSuccessMessage,
+                    message = state.globalSuccessMessage!!,
                     onDismiss = { onEvent(ContactEvent.OnClearGlobalSuccessMessage) }
                 )
             }
@@ -190,6 +187,7 @@ fun ContactListScreen(
     }
 }
 
+// ... Rest of the helper composables (PreviousSearchesList, etc.) remain unchanged ...
 @Composable
 fun PreviousSearchesList(
     searches: List<String>,
@@ -260,7 +258,6 @@ fun NoMatchesFoundView() {
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Used Spacer logic to push content slightly higher as requested in previous turn
         Spacer(modifier = Modifier.weight(0.3f))
 
         Icon(
@@ -297,7 +294,7 @@ fun ContactsHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp) // Added horizontal padding for alignment
+            .padding(horizontal = 16.dp)
             .padding(top = 16.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -372,6 +369,7 @@ fun ContactGroup(
 
 private enum class SwipeState { Closed, Open }
 
+@OptIn(ExperimentalFoundationApi::class) // Needed for AnchoredDraggable
 @Composable
 fun SwipeableContactItem(
     contact: Contact,
@@ -580,7 +578,7 @@ fun NoContactsView(onCreateClick: () -> Unit) {
 
         Text(
             text = "Create New Contact",
-            color = Color(0xFF007AFF), 
+            color = Color(0xFF007AFF),
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.clickable { onCreateClick() }

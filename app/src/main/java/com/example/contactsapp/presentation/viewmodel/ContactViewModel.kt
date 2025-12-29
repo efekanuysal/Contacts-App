@@ -93,7 +93,7 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                         isImagePickerBottomSheetOpen = false
                     )
                 }
-                if (_state.value.selectedContact != null) {
+                if (_state.value.selectedContact != null && event.uri != null) {
                     updateContact()
                 }
             }
@@ -123,7 +123,8 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                         isEditMode = false,
                         successMessage = null,
                         isMenuExpanded = false,
-                        isContactSaved = false
+                        isContactSaved = false,
+                        shouldNavigateBack = false // Fix: Reset navigation flag
                     )
                 }
             }
@@ -138,7 +139,8 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
                         isEditMode = false,
                         isContactSaved = false,
                         errorMessage = null,
-                        successMessage = null
+                        successMessage = null,
+                        shouldNavigateBack = false
                     )
                 }
             }
@@ -170,16 +172,6 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
             ContactEvent.OnClearGlobalSuccessMessage -> {
                 _state.update { it.copy(globalSuccessMessage = null) }
             }
-            else -> handleOtherEvents(event)
-        }
-    }
-
-    private fun handleOtherEvents(event: ContactEvent) {
-        when (event) {
-            ContactEvent.OnDismissImagePickerBottomSheet -> {
-                _state.update { it.copy(isImagePickerBottomSheetOpen = false) }
-            }
-            else -> {}
         }
     }
 
@@ -252,33 +244,35 @@ class ContactViewModel(application: Application) : AndroidViewModel(application)
 
     private fun saveToLocalPhone(context: Context) {
         val contact = _state.value.selectedContact ?: return
-        try {
-            val ops = ArrayList<android.content.ContentProviderOperation>()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ops = ArrayList<android.content.ContentProviderOperation>()
 
-            ops.add(android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.RawContacts.CONTENT_URI)
-                .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_TYPE, null)
-                .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_NAME, null)
-                .build())
+                ops.add(android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.RawContacts.CONTENT_URI)
+                    .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_TYPE, null)
+                    .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_NAME, null)
+                    .build())
 
-            ops.add(android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.Data.CONTENT_URI)
-                .withValueBackReference(android.provider.ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(android.provider.ContactsContract.Data.MIMETYPE, android.provider.ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
-                .withValue(android.provider.ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME, contact.firstName)
-                .withValue(android.provider.ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME, contact.lastName)
-                .build())
+                ops.add(android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(android.provider.ContactsContract.Data.RAW_CONTACT_ID, 0)
+                    .withValue(android.provider.ContactsContract.Data.MIMETYPE, android.provider.ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                    .withValue(android.provider.ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME, contact.firstName)
+                    .withValue(android.provider.ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME, contact.lastName)
+                    .build())
 
-            ops.add(android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.Data.CONTENT_URI)
-                .withValueBackReference(android.provider.ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(android.provider.ContactsContract.Data.MIMETYPE, android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
-                .withValue(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER, contact.phoneNumber)
-                .withValue(android.provider.ContactsContract.CommonDataKinds.Phone.TYPE, android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
-                .build())
+                ops.add(android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(android.provider.ContactsContract.Data.RAW_CONTACT_ID, 0)
+                    .withValue(android.provider.ContactsContract.Data.MIMETYPE, android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                    .withValue(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER, contact.phoneNumber)
+                    .withValue(android.provider.ContactsContract.CommonDataKinds.Phone.TYPE, android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+                    .build())
 
-            context.contentResolver.applyBatch(android.provider.ContactsContract.AUTHORITY, ops)
-            _state.update { it.copy(globalSuccessMessage = "User is added to your phone!", isContactSaved = true) }
-            fetchContacts()
-        } catch (e: Exception) {
-            e.printStackTrace()
+                context.contentResolver.applyBatch(android.provider.ContactsContract.AUTHORITY, ops)
+                _state.update { it.copy(globalSuccessMessage = "User is added to your phone!", isContactSaved = true) }
+                fetchContacts()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
